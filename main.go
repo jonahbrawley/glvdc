@@ -33,6 +33,7 @@ func main() {
 
 	c.Visit(url) // visit specified url
 
+	fmt.Println("\nTracks:\n")
 	// print (debug)
 	for _, element := range n {
 		fmt.Println("Name: ", element.Name)
