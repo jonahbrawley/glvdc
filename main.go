@@ -24,8 +24,8 @@ func main() {
 	c := colly.NewCollector()
 	n := []song{} // create array of struct
 
-	c.OnHTML(".title", func(e *colly.HTMLElement) {
-		name := e.ChildText(".span.track-title") // track name
+	c.OnHTML("div.title", func(e *colly.HTMLElement) {
+		name := e.ChildText(".track-title") // track name
 		time := e.ChildText(".time.secondaryText") // track time
 		
 		n = append(n, song{name, time})
@@ -33,6 +33,7 @@ func main() {
 
 	c.Visit(url) // visit specified url
 
+	// print (debug)
 	for _, element := range n {
 		fmt.Println("Name: ", element.Name)
 		fmt.Println("Time: ", element.Time)
