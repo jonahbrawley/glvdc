@@ -5,14 +5,39 @@ import(
 	"bufio"
 	"os"
 	"strings"
+
+	// scraper
+	"github.com/gocolly/colly"
 )
+
+type song struct {
+	Name string
+	Time string
+}
 
 func main() {
 	fmt.Println("-------- glvdc --------")
 	fmt.Println("-------- by: me -------")
 	fmt.Println("")
 	url := prompt("bc url:")
-	fmt.Println(url)
+	
+	c := colly.NewCollector()
+	n := []song{} // create array of struct
+
+	c.OnHTML(".title", func(e *colly.HTMLElement) {
+		name := e.ChildText(".span.track-title") // track name
+		time := e.ChildText(".time.secondaryText") // track time
+		
+		n = append(n, song{name, time})
+	})
+
+	c.Visit(url) // visit specified url
+
+	for _, element := range n {
+		fmt.Println("Name: ", element.Name)
+		fmt.Println("Time: ", element.Time)
+		fmt.Println("")
+	}
 }
 
 // prompt for url
