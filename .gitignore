@@ -1,0 +1,9 @@
+# Ignore all
+*
+
+# Unignore if it has ext
+!*.*
+
+# Unignore dirs
+!*/
+
