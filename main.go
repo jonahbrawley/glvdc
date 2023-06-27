@@ -11,18 +11,18 @@ import(
 	"github.com/gocolly/colly"
 )
 
-var(
-	year string
-	artist string 
-	album string
-)
-
 type song struct {
 	Name string
 	Time string
 }
 
 func main() {
+	var(
+		//year string
+		artist string 
+		album string
+	)
+
 	fmt.Println("-------- glvdc --------")
 	fmt.Println("-------- by: me -------")
 	fmt.Println("")
@@ -32,23 +32,47 @@ func main() {
 	c := colly.NewCollector()
 	n := []song{} // create array of struct
 
-	c.OnHTML("div.title", func(e *colly.HTMLElement) {
-		name := e.ChildText(".track-title") // track name
-		time := e.ChildText(".time.secondaryText") // track time
-		
-		n = append(n, song{name, time})
+	// callbacks
+	c.OnHTML("body", func(e *colly.HTMLElement) {
+		var(
+			name string 
+			time string 
+		)
+		e.ForEach("div.title", func(_ int, el *colly.HTMLElement) {
+			name = el.ChildText(".track-title") // track name
+			time = el.ChildText(".time.secondaryText") // track time
+			n = append(n, song{name, time})
+		})
+
+		e.ForEach("#name-section", func(_ int, el *colly.HTMLElement) {
+			album = el.ChildText(".trackTitle") // album name
+			artist = el.ChildText("h3 span") // artist name
+		})
 	})
 
-	c.Visit(url) // visit specified url
+	/*c.OnHTML("h2.trackTitle", func(e *colly.HTMLElement) {
+		album = e.ChildText("h2.trackTitle") // album name
+		//artist = e.ChildText("a href") // artist name
+	})
 
-	fmt.Println("\nTracks:\n")
+	c.OnHTML("div.tralbumData.tralbum-credits", func(e *colly.HTMLElement) {
+		year = e.ChildText("#text") // full date
+		//year = date[len(date)-4:] // release year
+	})*/
+
+	c.Visit(url) // visit bc url
+
 	// print (debug)
+	fmt.Println("\nAlbum: ", album)
+	fmt.Println("Artist: ", artist)
+	fmt.Println("\nTracks:")
 	for _, element := range n {
 		fmt.Println("Name: ", element.Name)
 		fmt.Println("Time: ", element.Time)
 		fmt.Println("")
 	}
 	fmt.Println("GEO - ", ctn)
+	//fmt.Println("Year: ", year)
 }
 
 func write() {
