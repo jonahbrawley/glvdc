@@ -4,11 +4,13 @@ import(
 	"fmt"
 	"bufio"
 	"os"
-	_ "io"
+	"io"
 	"strings"
 
 	// scraper
 	"github.com/gocolly/colly"
+	// time.Duration is stupid. This helps convert hh:mm:ss to duration obj
+	"github.com/dannav/hhmmss"
 )
 
 type song struct {
@@ -18,9 +20,11 @@ type song struct {
 
 func main() {
 	var(
-		//year string
 		artist string 
 		album string
+		year string
+		name string
+		time string
 	)
 
 	fmt.Println("-------- glvdc --------")
@@ -34,10 +38,6 @@ func main() {
 
 	// callbacks
 	c.OnHTML("body", func(e *colly.HTMLElement) {
-		var(
-			name string 
-			time string 
-		)
 		e.ForEach("div.title", func(_ int, el *colly.HTMLElement) {
 			name = el.ChildText(".track-title") // track name
 			time = el.ChildText(".time.secondaryText") // track time
@@ -48,51 +48,92 @@ func main() {
 			album = el.ChildText(".trackTitle") // album name
 			artist = el.ChildText("h3 span") // artist name
 		})
+
+		e.ForEach(".tralbumData.tralbum-credits", func(_ int, el *colly.HTMLElement) {
+			date,_,_ := strings.Cut(strings.TrimSpace(el.Text), "\n") // full date (released Jan 01, 20xx)
+			year = date[len(date)-4:] // grab year
+		})
 	})
 
-	/*c.OnHTML("h2.trackTitle", func(e *colly.HTMLElement) {
-		album = e.ChildText("h2.trackTitle") // album name
-		//artist = e.ChildText("a href") // artist name
-	})
+	c.Visit(url) // visit, get results
 
-	c.OnHTML("div.tralbumData.tralbum-credits", func(e *colly.HTMLElement) {
-		year = e.ChildText("#text") // full date
-		//year = date[len(date)-4:] // release year
-	})*/
-
-	c.Visit(url) // visit bc url
-
-	// print (debug)
-	fmt.Println("\nAlbum: ", album)
-	fmt.Println("Artist: ", artist)
-	fmt.Println("\nTracks:")
-	for _, element := range n {
-		fmt.Println("Name: ", element.Name)
-		fmt.Println("Time: ", element.Time)
-		fmt.Println("")
-	}
-	fmt.Println("GEO - ", ctn)
-	//fmt.Println("Year: ", year)
+	write(artist, album, year, ctn, n)
 }
 
-func write() {
+// this function writes to the output.txt file and echoes
+// its output to the cli
+func write(ar string, al string, yr string, cat string, n []song) {
 	f, err := os.Create("output.txt")
 	if err != nil {
 		panic(err)
 	}
-	defer f.Close()
-	w := bufio.NewWriter(f)
+	w := io.MultiWriter(os.Stdout, f)
+	defer f.Close() // close at finish
 
-	// write
-	_, err = fmt.Fprint(w, 
-	`Label: Geometric Lullaby
-	Artist: First Kings
-	Album: Water Birth
-	Year: 2018
-	(GEO - )`)
+	fmt.Println("\n-----------------------\n")
+
+	// write header
+	_, err = fmt.Fprintf(w, 
+	"Label: Geometric Lullaby\n" +
+	"Artist: %s\n" +
+	"Album: %s\n" +
+	"Year: %s\n" +
+	"(GEO - %s)\n",
+	ar, al, yr, cat)
+
+	_, err = fmt.Fprint(w,
+	"\nDownload for free or purchase at: https://geometriclullaby.bandcamp.com/\n",
+	)
+
+	// save first track info and remove from slice
+	var(
+		fname string = n[0].Name
+		ftime string = n[0].Time
+	)
+	n = n[1:] // remove first track info
+
+	_, err = fmt.Fprintf(w,
+	"\n00:00 - %s\n",
+	fname)
+
+	dur, _ := hhmmss.Parse(fc(ftime))
+	for _, element := range n {
+		// convert float
+		s := fmt.Sprintf("%.0f", dur.Seconds())
+		m := fmt.Sprintf("%.0f", dur.Minutes())
+		h := fmt.Sprintf("%.0f", dur.Hours())
+		
+		_, err = fmt.Fprintf(w,
+		"%s:%s:%s - %s\n",
+		h, m, s, element.Name,
+		)
+		ftime = element.Time
+		nextdur, _ := hhmmss.Parse(fc(ftime))
+		dur += nextdur
+	}
+
+	if err != nil {
+		panic(err)
+	}
 }
 
-// prompt for url
+// this function is here because sometimes if a track is long,
+// bandcamp formats in hh:mm:ss instead of mm:ss
+func fc(time string) string { // fc == format check
+	x := strings.Count(time, ":")
+	if x == 1 {
+		return ("00:" + time)
+	} else if x == 2 {
+		return time
+	} else {
+		fmt.Println("ERROR examining time format... character ':' count == ", x)
+		panic("Execution stopped")
+	}
+}
+
+// prompts for url and cat no
+// todo: these could be 1 function
+// ------------------------------------
 func urlprompt(label string) string {
 	var s string
 	r := bufio.NewReader(os.Stdin)
