@@ -6,6 +6,9 @@ import(
 	"os"
 	"io"
 	"strings"
+	"time"
+	_ "math"
+	_ "strconv"
 
 	// scraper
 	"github.com/gocolly/colly"
@@ -17,6 +20,12 @@ type song struct {
 	Name string
 	Time string
 }
+
+// type dur struct {
+// 	Hours int
+// 	Minutes int
+// 	Seconds int
+// }
 
 func main() {
 	var(
@@ -93,31 +102,38 @@ func write(ar string, al string, yr string, cat string, n []song) {
 	n = n[1:] // remove first track info
 
 	_, err = fmt.Fprintf(w,
-	"\n00:00 - %s\n",
+	"\n00:00:00 - %s\n",
 	fname)
 
-	dur, _ := hhmmss.Parse(fc(ftime))
-	for _, element := range n {
-		// convert float
-		s := fmt.Sprintf("%.0f", dur.Seconds())
-		m := fmt.Sprintf("%.0f", dur.Minutes())
-		h := fmt.Sprintf("%.0f", dur.Hours())
-		
-		_, err = fmt.Fprintf(w,
-		"%s:%s:%s - %s\n",
-		h, m, s, element.Name,
-		)
-		ftime = element.Time
-		nextdur, _ := hhmmss.Parse(fc(ftime))
-		dur += nextdur
-	}
+	ftparsed, _ := hhmmss.Parse(fc(ftime))
+	added_dur := time.Duration(int64(ftparsed/time.Second)) * time.Second
 
-	if err != nil {
-		panic(err)
+	for _, element := range n {
+		_, err = fmt.Fprintf(w,
+			fmtDuration(added_dur) + " - %s\n",
+			element.Name,
+		)
+		if err != nil {
+			panic(err)
+		}
+		cdur, _ := hhmmss.Parse(fc(element.Time)) // GRAB NEXT TRACK DURATION
+		// ADD TO added_dur
+		added_dur = time.Duration(int64(added_dur/time.Second)+int64(cdur/time.Second)) * time.Second
+		//fmt.Println(added_dur) // DEBUG
 	}
 }
 
-// this function is here because sometimes if a track is long,
+func fmtDuration(d time.Duration) string {
+	//d = d.Round(time.Minute)
+	h := d / time.Hour
+	d -= h * time.Hour
+	m := d / time.Minute
+	d -= m * time.Minute // new
+	s := d / time.Second // new
+	return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
+}
+
+// sometimes if a track is long,
 // bandcamp formats in hh:mm:ss instead of mm:ss
 func fc(time string) string { // fc == format check
 	x := strings.Count(time, ":")
