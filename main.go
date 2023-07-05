@@ -6,18 +6,26 @@ import (
 	"io"
 	_ "math"
 	"os"
-	_ "strconv"
 	"strings"
 	"time"
 
 	"github.com/dannav/hhmmss"          // convert hh:mm:ss to duration()
-	_ "github.com/gocolly/colly"        // scraper
+	"github.com/gocolly/colly"          // scraper
+	"github.com/hajimehoshi/go-mp3"     // parse mp3
 	"github.com/lxn/walk"               // frontend
 	. "github.com/lxn/walk/declarative" // dependency
 	_ "github.com/lxn/win"              // dependency
 )
 
-type song struct {
+type Album struct {
+	Link   string
+	Artist string
+	Name   string
+	Year   string
+	CatNo  string
+}
+
+type Song struct {
 	Name string
 	Time string
 }
@@ -26,6 +34,8 @@ type Settings struct {
 	Output int
 	Dev    bool
 }
+
+const sampleSize = 4 // from mp3 documentation
 
 // CLI MAIN
 //
@@ -93,9 +103,9 @@ func main() {
 						},
 					},
 					PushButton{
-						Text: "upload",
+						Text: "generate",
 						OnClicked: func() {
-							DropFiles(window)
+							AlbumInformation(window)
 						},
 					},
 					PushButton{
@@ -123,22 +133,26 @@ func OutFormats() []*Formats {
 	}
 }
 
-func DropFiles(owner walk.Form) (int, error) {
+func AlbumInformation(owner walk.Form) (int, error) {
 	var dlg *walk.MainWindow
 	var txt *walk.TextEdit
 	var uploadSuccess = walk.NewMutableCondition()
+	// TODO: UNCOMMENT UF CALLS
+	var uf []string
+	album := new(Album)
+	var link, ctn *walk.LineEdit
 
 	MustRegisterCondition("uploadSuccess", uploadSuccess)
 
 	return MainWindow{
 		AssignTo: &dlg,
 		Title:    "upload",
-		Size:     Size{466, 215},
-		MinSize:  Size{466, 215},
+		Size:     Size{450, 280},
+		MinSize:  Size{450, 280},
 		Layout:   VBox{},
 		OnDropFiles: func(files []string) {
-			//txt.SetText(strings.Join(files, "\r\n"))
 			if CheckFiles(files) == "upload successful" {
+				uf = files
 				uploadSuccess.SetSatisfied(true)
 			} else {
 				uploadSuccess.SetSatisfied(false)
@@ -149,8 +163,45 @@ func DropFiles(owner walk.Form) (int, error) {
 			Composite{
 				Layout: Grid{Columns: 2},
 				Children: []Widget{
+					Label{
+						Text: "bandcamp link:",
+					},
+					LineEdit{
+						AssignTo: &link,
+						OnTextChanged: func() {
+							album.Link = link.Text()
+						},
+						OnEditingFinished: func() {
+							fmt.Println("bc link set to: " + album.Link)
+						},
+					},
+				},
+			},
+			Composite{
+				Layout: Grid{
+					Columns: 2,
+				},
+				Children: []Widget{
+					Label{
+						Text: "catalog no: GEO-",
+					},
+					LineEdit{
+						AssignTo: &ctn,
+						MaxSize:  Size{40, 0},
+						OnTextChanged: func() {
+							album.CatNo = ctn.Text()
+						},
+						OnEditingFinished: func() {
+							fmt.Println("cat no set to: " + album.CatNo)
+						},
+					},
+				},
+			},
+			Composite{
+				Layout: Grid{Columns: 4},
+				Children: []Widget{
 					TextEdit{
-						ColumnSpan: 2,
+						ColumnSpan: 4,
 						AssignTo:   &txt,
 						ReadOnly:   true,
 						Text:       "drop album audio here\r\n(must be in format: mp3)",
@@ -162,17 +213,41 @@ func DropFiles(owner walk.Form) (int, error) {
 				Children: []Widget{
 					HSpacer{},
 					PushButton{
-						//AssignTo: ,
 						Text:    "submit",
 						Enabled: uploadSuccess,
 						OnClicked: func() {
-							//dlg.
+							ScrapeBandcamp(album)
+							fmt.Println("results-----")
+							fmt.Println("name: " + album.Name)
+							fmt.Println("artist: " + album.Artist)
+							fmt.Println("year: " + album.Year)
+							GenerateOutput(album, uf) // generate album description
 						},
 					},
 				},
 			},
 		},
 	}.Run()
+}
+
+// collect artist, album, and year fields from link
+func ScrapeBandcamp(album *Album) {
+	c := colly.NewCollector()
+	// callbacks
+	c.OnHTML("body", func(e *colly.HTMLElement) {
+		e.ForEach("#name-section", func(_ int, el *colly.HTMLElement) {
+			album.Name = el.ChildText(".trackTitle") // album name
+			album.Artist = el.ChildText("h3 span")   // artist name
+		})
+
+		e.ForEach(".tralbumData.tralbum-credits", func(_ int, el *colly.HTMLElement) {
+			date, _, _ := strings.Cut(strings.TrimSpace(el.Text), "\n") // full date (released Jan 01, 20xx)
+			album.Year = date[len(date)-4:]                             // grab year
+		})
+	})
+
+	fmt.Println("Visiting: " + album.Link)
+	c.Visit(album.Link) // visit, get results
 }
 
 // returns problem files if any extensions are not mp3. wav and flac unsupported for now.
@@ -192,6 +267,54 @@ func CheckFiles(files []string) string {
 	} else {
 		return "error uploading\r\nformat not allowed:\r\n" + strings.Join(e, "\r\n")
 	}
+}
+
+// generates GL video description output based on user input
+// currently set to output in file 'output.txt'
+// todo: allow user output settings
+func GenerateOutput(al *Album, uf []string) {
+	fmt.Println("Generating output...")
+	f, err := os.Create("output.txt")
+	if err != nil {
+		fmt.Println(err)
+	}
+	w := io.MultiWriter(os.Stdout, f)
+	defer f.Close() // close at finish
+	fmt.Println("output.txt> File created ")
+
+	// write header
+	_, err = fmt.Fprintf(w,
+		"Label: Geometric Lullaby\n"+
+			"Artist: %s\n"+
+			"Album: %s\n"+
+			"Year: %s\n"+
+			"(GEO - %s)\n",
+		al.Artist, al.Name, al.Year, al.CatNo)
+
+	_, err = fmt.Fprint(w,
+		"\nDownload for free or purchase at: https://geometriclullaby.bandcamp.com/\n",
+	)
+
+	fmt.Println("output.txt> Writing track information")
+	for _, element := range uf {
+		f, err := os.Open(element) // element in this case is path to file
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		d, err := mp3.NewDecoder(f)
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		samples := d.Length() / sampleSize
+		audioLength := samples / int64(d.SampleRate())
+		//audiodur := time.Duration(audioLength time.Second)
+		fmt.Fprintf(w, "\n"+element+" length: %d", audioLength)
+
+		f.Close()
+	}
+	fmt.Println("\noutput.txt> Done.")
 }
 
 func SettingsDialog(owner walk.Form, settings *Settings) (int, error) {
@@ -235,9 +358,11 @@ func SettingsDialog(owner walk.Form, settings *Settings) (int, error) {
 	}.Run(owner)
 }
 
+// OLD FUNCTIONS FOR CLI APPLICATION BELOW
+
 // this function writes to the output.txt file and echoes
 // its output to the cli
-func write(ar string, al string, yr string, cat string, n []song) {
+func write(ar string, al string, yr string, cat string, n []Song) {
 	f, err := os.Create("output.txt")
 	if err != nil {
 		panic(err)
