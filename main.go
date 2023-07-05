@@ -126,6 +126,9 @@ func OutFormats() []*Formats {
 func DropFiles(owner walk.Form) (int, error) {
 	var dlg *walk.MainWindow
 	var txt *walk.TextEdit
+	var uploadSuccess = walk.NewMutableCondition()
+
+	MustRegisterCondition("uploadSuccess", uploadSuccess)
 
 	return MainWindow{
 		AssignTo: &dlg,
@@ -135,25 +138,51 @@ func DropFiles(owner walk.Form) (int, error) {
 		Layout:   VBox{},
 		OnDropFiles: func(files []string) {
 			//txt.SetText(strings.Join(files, "\r\n"))
+			if CheckFiles(files) == "upload successful" {
+				uploadSuccess.SetSatisfied(true)
+			} else {
+				uploadSuccess.SetSatisfied(false)
+			}
 			txt.SetText(CheckFiles(files))
 		},
 		Children: []Widget{
-			TextEdit{
-				AssignTo: &txt,
-				ReadOnly: true,
-				Text:     "drop album audio here\r\n(mp3, wav, flac)",
+			Composite{
+				Layout: Grid{Columns: 2},
+				Children: []Widget{
+					TextEdit{
+						ColumnSpan: 2,
+						AssignTo:   &txt,
+						ReadOnly:   true,
+						Text:       "drop album audio here\r\n(must be in format: mp3)",
+					},
+				},
+			},
+			Composite{
+				Layout: HBox{},
+				Children: []Widget{
+					HSpacer{},
+					PushButton{
+						//AssignTo: ,
+						Text:    "submit",
+						Enabled: uploadSuccess,
+						OnClicked: func() {
+							//dlg.
+						},
+					},
+				},
 			},
 		},
 	}.Run()
 }
 
-// returns problem files if any extensions are not mp3, wav, or flac
+// returns problem files if any extensions are not mp3. wav and flac unsupported for now.
 // otherwise displays upload successful
 func CheckFiles(files []string) string {
 	var e []string
 	for _, element := range files {
 		fmt.Println("Processing upload... " + element)
-		if !strings.HasSuffix(element, ".mp3") && !strings.HasSuffix(element, ".wav") && !strings.HasSuffix(element, ".flac") {
+		//if !strings.HasSuffix(element, ".mp3") && !strings.HasSuffix(element, ".wav") && !strings.HasSuffix(element, ".flac") {
+		if !strings.HasSuffix(element, ".mp3") {
 			fmt.Println(">> Illegal extension")
 			e = append(e, element) // add problem file to slice
 		}
@@ -161,7 +190,7 @@ func CheckFiles(files []string) string {
 	if len(e) == 0 {
 		return "upload successful"
 	} else {
-		return "error uploading\r\nfiles not allowed:\r\n" + strings.Join(e, "\r\n")
+		return "error uploading\r\nformat not allowed:\r\n" + strings.Join(e, "\r\n")
 	}
 }
 
