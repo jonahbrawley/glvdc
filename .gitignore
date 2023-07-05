@@ -2,7 +2,13 @@
 *
 
 # Unignore if it has ext
-!*.*
+!*.mod
+!*.sum
+!*.go
+!*.manifest
+!Makefile
+!*.txt
+!*.md
 
 # Unignore dirs
 !*/

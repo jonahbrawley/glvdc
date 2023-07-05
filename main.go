@@ -22,13 +22,10 @@ type song struct {
 	Time string
 }
 
-var (
-	window *walk.MainWindow
-	width  int = 320
-	height int = 240
-	// x      int = 200
-	// y      int = 200
-)
+type Settings struct {
+	Output int
+	Dev    bool
+}
 
 // CLI MAIN
 //
@@ -75,27 +72,138 @@ var (
 }*/
 
 func main() {
+	settings := new(Settings)
+	var window *walk.MainWindow
+
 	MainWindow{
-		Title:  "glvdc",
-		Layout: VBox{},
-		//AssignTo: &window,
-		Size: Size{320, 240},
+		Title:    "glvdc",
+		Layout:   VBox{},
+		AssignTo: &window,
+		Size:     Size{242, 158},
+		MinSize:  Size{242, 158},
 		Children: []Widget{
-			Label{Text: "----glvdc----"},
-			PushButton{
-				Text: "Upload",
-				OnClicked: func() {
-					walk.App().Exit(0)
-				},
-			},
-			PushButton{
-				Text: "Quit",
-				OnClicked: func() {
-					walk.App().Exit(0)
+			Composite{
+				Layout: Grid{Columns: 1, Alignment: AlignHCenterVCenter},
+				Children: []Widget{
+					Composite{
+						Layout: Grid{Columns: 1, Alignment: AlignHCenterVCenter},
+						Children: []Widget{
+							Label{Text: "-----glvdc-----"},
+							Label{Text: "-----by: me---"},
+						},
+					},
+					PushButton{
+						Text: "upload",
+						OnClicked: func() {
+							DropFiles(window)
+						},
+					},
+					PushButton{
+						Text: "settings",
+						OnClicked: func() {
+							//walk.App().Exit(0)
+							SettingsDialog(window, settings)
+						},
+					},
 				},
 			},
 		},
 	}.Run()
+}
+
+type Formats struct {
+	Id   int
+	Name string
+}
+
+func OutFormats() []*Formats {
+	return []*Formats{
+		{0, "file"},
+		{1, "display"},
+	}
+}
+
+func DropFiles(owner walk.Form) (int, error) {
+	var dlg *walk.MainWindow
+	var txt *walk.TextEdit
+
+	return MainWindow{
+		AssignTo: &dlg,
+		Title:    "upload",
+		Size:     Size{466, 215},
+		MinSize:  Size{466, 215},
+		Layout:   VBox{},
+		OnDropFiles: func(files []string) {
+			//txt.SetText(strings.Join(files, "\r\n"))
+			txt.SetText(CheckFiles(files))
+		},
+		Children: []Widget{
+			TextEdit{
+				AssignTo: &txt,
+				ReadOnly: true,
+				Text:     "drop album audio here\r\n(mp3, wav, flac)",
+			},
+		},
+	}.Run()
+}
+
+// returns problem files if any extensions are not mp3, wav, or flac
+// otherwise displays upload successful
+func CheckFiles(files []string) string {
+	var e []string
+	for _, element := range files {
+		fmt.Println("Processing upload... " + element)
+		if !strings.HasSuffix(element, ".mp3") && !strings.HasSuffix(element, ".wav") && !strings.HasSuffix(element, ".flac") {
+			fmt.Println(">> Illegal extension")
+			e = append(e, element) // add problem file to slice
+		}
+	}
+	if len(e) == 0 {
+		return "upload successful"
+	} else {
+		return "error uploading\r\nfiles not allowed:\r\n" + strings.Join(e, "\r\n")
+	}
+}
+
+func SettingsDialog(owner walk.Form, settings *Settings) (int, error) {
+	var dlg *walk.Dialog
+	var db *walk.DataBinder
+
+	return Dialog{
+		AssignTo: &dlg,
+		DataBinder: DataBinder{
+			AssignTo:   &db,
+			Name:       "settings",
+			DataSource: settings,
+		},
+		Title:   "Settings",
+		Size:    Size{242, 158},
+		MinSize: Size{242, 158},
+		Layout:  VBox{},
+		Children: []Widget{
+			Composite{
+				Layout: Grid{Columns: 2},
+				Children: []Widget{
+					Label{
+						Text: "output format:",
+					},
+					ComboBox{
+						Value:         Bind("Output"),
+						BindingMember: "Id",
+						DisplayMember: "Name",
+						Model:         OutFormats(),
+					},
+
+					Label{
+						Text: "dev mode:",
+					},
+					CheckBox{
+						Checked: Bind("Dev"),
+					},
+				},
+			},
+		},
+	}.Run(owner)
 }
 
 // this function writes to the output.txt file and echoes
